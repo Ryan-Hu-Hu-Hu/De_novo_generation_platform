@@ -1,0 +1,6 @@
+flask>=3.0
+line-bot-sdk>=3.0
+requests>=2.31
+python-dotenv>=1.0
+biopython>=1.83
+aiohttp<3.10  # pin for Python 3.9 compatibility

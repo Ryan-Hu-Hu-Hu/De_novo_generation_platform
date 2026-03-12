@@ -1,0 +1,42 @@
+# ── Credentials & secrets ────────────────────────────────────────────────────
+.env
+*.key
+*.pem
+secrets.yaml
+
+# ── Runtime / job data ───────────────────────────────────────────────────────
+data/
+jobs.db
+*.db
+
+# ── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+*.so
+
+# ── Large model weights (download separately) ────────────────────────────────
+tools/large_model_pth/
+CLEAN/app/weights/
+CLEAN/app/data/esm_data/
+*.pth
+*.pt
+*.pkl
+# Keep tracked pkl files (vocab, pretrained trfm)
+!UniKP/vocab.pkl
+!UniKP/trfm_12_23000.pkl
+
+# ── Virtual envs ─────────────────────────────────────────────────────────────
+.venv/
+venv/
+env/
+
+# ── Misc ─────────────────────────────────────────────────────────────────────
+.DS_Store
+*.log
+=*
+cloudflared
+ngrok
