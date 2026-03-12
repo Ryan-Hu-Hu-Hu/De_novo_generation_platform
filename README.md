@@ -39,12 +39,18 @@ Pipeline Orchestrator
 
 ### Conda environments
 
-| Environment | Python | Used for |
-|---|---|---|
-| `lin` | 3.9 | Flask chatbot, ProteinMPNN, SoDoPE, Seq2Topt, RFdiffusion |
-| `Uni_test` | 3.10 | UniKP kinetics prediction |
+| Environment | Python | Used for | Environment file |
+|---|---|---|---|
+| `lin` | 3.9 | Flask chatbot, ProteinMPNN, SoDoPE, Seq2Topt, RFdiffusion | `envs/lin.yml` |
+| `Uni_test` | 3.10 | UniKP kinetics prediction | `envs/Uni_test.yml` |
 
-Create the main environment and install dependencies:
+**Recommended — restore from the provided environment files (exact reproducibility):**
+```bash
+conda env create -f envs/lin.yml
+conda env create -f envs/Uni_test.yml
+```
+
+**Alternative — create from scratch:**
 ```bash
 conda create -n lin python=3.9 -y
 conda activate lin
@@ -193,6 +199,10 @@ De_novo_generation_platform/
 ├── CLEAN/                     # (git submodule)
 ├── SoDoPE_paper_2020/         # (git submodule)
 ├── UniKP/                     # (git submodule)
+│
+├── envs/
+│   ├── lin.yml                # Exact conda env for lin (main environment)
+│   └── Uni_test.yml           # Exact conda env for Uni_test (UniKP)
 │
 ├── docs/
 │   └── LINE_setup_guide.md
