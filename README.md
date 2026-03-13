@@ -1,3 +1,17 @@
+---
+license: mit
+tags:
+  - protein-design
+  - de-novo-generation
+  - enzyme-engineering
+  - rfdiffusion
+  - proteinmpnn
+  - chatbot
+language:
+  - en
+pretty_name: De Novo Protein Generation Platform
+---
+
 # De Novo Protein Generation Platform
 
 An automated pipeline for de novo enzyme design, integrated with a LINE chatbot frontend. Users send a PDB template code and a target reaction temperature via LINE; the platform generates novel protein sequences, evaluates them through a multi-stage screening pipeline, and returns the best candidate.
