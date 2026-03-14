@@ -397,15 +397,35 @@ class PipelineOrchestrator:
                 f"All iterations complete. Returning best-so-far: "
                 f"{best_so_far.get('name', 'unknown')}"
             )
-            # Attempt Seq2Topt on the best-so-far sequence if topt not yet set
-            if best_so_far.get("topt") is None and best_so_far.get("sequence"):
+            seq = best_so_far.get("sequence")
+            name = best_so_far.get("name")
+
+            # Run UniKP on best-so-far if kinetics were never recorded
+            if smiles and seq and name and "kcat" not in best_so_far:
                 try:
-                    seq_map = {best_so_far["name"]: best_so_far["sequence"]}
+                    unikp_out = run_unikp(
+                        {name: seq}, smiles,
+                        os.path.join(job_dir, "final_unikp"),
+                    )
+                    kin = parse_unikp_results(unikp_out).get(name, {})
+                    best_so_far.update({
+                        "kcat":    kin.get("kcat"),
+                        "Km":      kin.get("Km"),
+                        "kcat_Km": kin.get("kcat_Km"),
+                    })
+                except Exception as exc:
+                    logger.warning("Final UniKP failed: %s", exc)
+
+            # Run Seq2Topt on best-so-far if topt was never recorded
+            if seq and name and best_so_far.get("topt") is None:
+                try:
+                    seq_map = {name: seq}
                     s2t_out = run_seq2topt(seq_map, os.path.join(job_dir, "final_seq2topt"))
-                    topt_preds = parse_seq2topt_results(s2t_out, seq_names=list(seq_map.keys()))
-                    best_so_far["topt"] = topt_preds.get(best_so_far["name"])
+                    topt_preds = parse_seq2topt_results(s2t_out, seq_names=[name])
+                    best_so_far["topt"] = topt_preds.get(name)
                 except Exception as exc:
                     logger.warning("Final Seq2Topt failed: %s", exc)
+
             return best_so_far
 
         cb("Pipeline completed with no viable candidates.")

@@ -184,18 +184,26 @@ def submit_job(
 
             # Format and push final result
             if result.get("sequence"):
+                import math
+                def _fmt(v, fmt, unit):
+                    """Format a numeric value, treating None and NaN as N/A."""
+                    if v is None:
+                        return "N/A"
+                    try:
+                        return f"{fmt.format(float(v))} {unit}" if not math.isnan(float(v)) else "N/A"
+                    except (TypeError, ValueError):
+                        return "N/A"
+
                 topt = result.get('topt')
-                kcat = result.get('kcat')
-                km   = result.get('Km')
                 msg = (
                     f"Job complete!\n"
                     f"─────────────────────\n"
                     f"Candidate: {result['name']}\n"
                     f"EC: {result.get('ec', 'N/A')}\n"
                     f"Solubility (SWI): {result.get('solubility', 0):.3f}\n"
-                    f"Topt: {f'{topt:.1f}°C' if topt is not None else 'N/A'}\n"
-                    f"kcat: {f'{kcat:.3f} s⁻¹' if kcat is not None else 'N/A'}\n"
-                    f"Km: {f'{km:.3f} mM' if km is not None else 'N/A'}\n"
+                    f"Topt: {_fmt(topt, '{:.1f}', '°C')}\n"
+                    f"kcat: {_fmt(result.get('kcat'), '{:.3f}', 's⁻¹')}\n"
+                    f"Km: {_fmt(result.get('Km'), '{:.3f}', 'mM')}\n"
                     f"─────────────────────\n"
                     f"Sequence ({len(result['sequence'])} aa):\n"
                     f"{result['sequence']}"
