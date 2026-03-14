@@ -157,9 +157,24 @@ def submit_job(
         job_dir = os.path.join(DATA_DIR, "jobs", job_id)
         orchestrator = PipelineOrchestrator()
 
+        # Batch progress messages — only push at key milestones to reduce API calls.
+        # Messages accumulate in a buffer; a flush is triggered when specific
+        # milestone keywords appear in the latest message.
+        _FLUSH_TRIGGERS = (
+            "Computing template baselines",  # flush: startup (PDB + P2Rank)
+            "Iteration ",                    # flush: baseline summary
+            "No candidates passed",          # flush: iteration sub-result
+            "All iterations complete",       # flush: all-done summary
+            "Pipeline completed",            # flush: no candidates at all
+        )
+        _buf: list = []
+
         def progress(msg: str):
             logger.info("[job %s] %s", job_id, msg)
-            push_message(user_id, msg)
+            _buf.append(msg)
+            if any(msg.startswith(t) for t in _FLUSH_TRIGGERS):
+                push_message(user_id, "\n".join(_buf))
+                _buf.clear()
 
         try:
             result = orchestrator.run(pdb_id, target_temp, job_dir, progress)
@@ -169,14 +184,21 @@ def submit_job(
 
             # Format and push final result
             if result.get("sequence"):
+                topt = result.get('topt')
+                kcat = result.get('kcat')
+                km   = result.get('Km')
                 msg = (
                     f"Job complete!\n"
-                    f"Sequence: {result['sequence'][:60]}...\n"
+                    f"─────────────────────\n"
+                    f"Candidate: {result['name']}\n"
                     f"EC: {result.get('ec', 'N/A')}\n"
-                    f"Solubility: {result.get('solubility', 'N/A'):.3f}\n"
-                    f"Topt: {result.get('topt', 'N/A'):.1f}°C\n"
-                    f"kcat: {result.get('kcat', 'N/A')}\n"
-                    f"Km: {result.get('Km', 'N/A')}"
+                    f"Solubility (SWI): {result.get('solubility', 0):.3f}\n"
+                    f"Topt: {f'{topt:.1f}°C' if topt is not None else 'N/A'}\n"
+                    f"kcat: {f'{kcat:.3f} s⁻¹' if kcat is not None else 'N/A'}\n"
+                    f"Km: {f'{km:.3f} mM' if km is not None else 'N/A'}\n"
+                    f"─────────────────────\n"
+                    f"Sequence ({len(result['sequence'])} aa):\n"
+                    f"{result['sequence']}"
                 )
             else:
                 msg = result.get("message", "No candidates found.")

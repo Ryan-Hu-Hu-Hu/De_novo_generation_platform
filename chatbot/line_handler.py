@@ -204,12 +204,13 @@ def _handle_processing(user_id: str, reply_token: str, text: str) -> None:
         import json
         result = json.loads(job.get("result") or "{}")
         if result.get("sequence"):
+            topt = result.get('topt')
             msg = (
-                f"Your job is complete!\n"
                 f"Best candidate: {result['name']}\n"
-                f"Sequence: {result['sequence'][:80]}...\n"
                 f"EC: {result.get('ec', 'N/A')}\n"
-                f"Topt: {result.get('topt', 'N/A')}°C"
+                f"Topt: {f'{topt:.1f}°C' if topt is not None else 'N/A'}\n"
+                f"Sequence ({len(result['sequence'])} aa):\n"
+                f"{result['sequence']}"
             )
         else:
             msg = result.get("message", "No candidates found.")
