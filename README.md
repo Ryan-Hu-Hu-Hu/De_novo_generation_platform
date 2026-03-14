@@ -73,6 +73,8 @@ pip install -r requirements_chatbot.txt
 
 For the UniKP environment see [`UniKP/README.md`](UniKP/README.md).
 
+> **Note:** UniKP models (~1.2 GB) are pre-trained separately and stored in `UniKP/models/` (gitignored). Run the training step below before starting the platform.
+
 ---
 
 ## Installation
@@ -140,7 +142,18 @@ Update `FLASK_BACKEND_URL` in your Wix `http-functions.js` to:
 https://xxx.trycloudflare.com/callback
 ```
 
-### 5. Run the platform
+### 5. Pre-train UniKP ensemble models
+
+UniKP requires 10 pre-trained models (5 for kcat, 5 for kcat/Km). This only needs to be run **once** (~5–10 minutes):
+
+```bash
+conda activate Uni_test
+python UniKP/train_models.py
+```
+
+Models are saved to `UniKP/models/` (≈1.2 GB total, gitignored). At inference time the platform loads them directly — no retraining on each query.
+
+### 6. Run the platform
 
 ```bash
 conda activate lin

@@ -22,9 +22,11 @@ build/
 tools/large_model_pth/
 CLEAN/app/weights/
 CLEAN/app/data/esm_data/
+UniKP/models/
 *.pth
 *.pt
 *.pkl
+*.joblib
 # Keep tracked pkl files (vocab, pretrained trfm)
 !UniKP/vocab.pkl
 !UniKP/trfm_12_23000.pkl
