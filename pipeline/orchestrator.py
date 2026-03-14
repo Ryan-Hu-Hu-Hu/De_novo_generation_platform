@@ -11,10 +11,11 @@ from .config import (
     SEQ2TOPT_RESULT_DIR, FINAL_RESULT_DIR, JSON_DIR,
     ALL_DATA_DIRS,
 )
-from .pdb_utils import download_pdb, get_template_sequence, get_ligand_smiles
+from .pdb_utils import download_pdb, get_template_sequence, get_ligand_smiles, get_chain_residue_numbers
 from .active_site import (
     run_p2rank, parse_p2rank_output,
-    cluster_into_islands, islands_to_contig, islands_to_fixed_residues,
+    cluster_into_islands, split_islands_at_gaps,
+    islands_to_contig, islands_to_fixed_residues,
 )
 from .rfdiffusion_runner import run_rfdiffusion
 from .proteinmpnn_runner import (
@@ -102,7 +103,8 @@ class PipelineOrchestrator:
         cb("Downloading template PDB…")
         pdb_path = download_pdb(pdb_id, os.path.join(job_dir, "pdb"))
         template_seq = get_template_sequence(pdb_path)
-        cb(f"Template sequence retrieved ({len(template_seq)} aa).")
+        pdb_residues = get_chain_residue_numbers(pdb_path)   # residues actually in PDB
+        cb(f"Template sequence retrieved ({len(template_seq)} aa, {len(pdb_residues)} residues in PDB chain A).")
 
         smiles = get_ligand_smiles(pdb_id, pdb_path=pdb_path)
         if not smiles:
@@ -117,14 +119,20 @@ class PipelineOrchestrator:
             run_p2rank(pdb_path, p2rank_out)
             pdb_stem = os.path.splitext(os.path.basename(pdb_path))[0]
             raw_residues = parse_p2rank_output(p2rank_out, pdb_stem)
+            # Filter P2Rank residues to those actually present in the PDB
+            raw_residues = [r for r in raw_residues if r in pdb_residues]
             # Consolidate into at most 2 contiguous motif islands (all residues covered).
             # Use template length here; capping is applied later after effective_length is set.
             motif_islands = cluster_into_islands(raw_residues, len(template_seq), max_islands=2, padding=5)
+            # Split islands at any PDB gaps so every contig segment is contiguous in the PDB
+            motif_islands = split_islands_at_gaps(motif_islands, pdb_residues)
             fixed_residues = islands_to_fixed_residues(motif_islands)
+            # Clamp fixed_residues to actual PDB residues
+            fixed_residues = [r for r in fixed_residues if r in pdb_residues]
             cb(
                 f"Active site residues: {raw_residues}\n"
-                f"Motif islands (≤2): {motif_islands}\n"
-                f"Fixed positions: {fixed_residues}"
+                f"Motif islands (validated): {motif_islands}\n"
+                f"Fixed positions: {len(fixed_residues)} residues"
             )
         except (FileNotFoundError, RuntimeError) as exc:
             logger.warning("P2Rank failed (%s); using empty contig.", exc)
@@ -189,7 +197,8 @@ class PipelineOrchestrator:
             effective_length = MAX_GENERATED_LENGTH
             # Drop island ranges and fixed residues that fall beyond the cap
             motif_islands = [(s, min(e, effective_length)) for s, e in motif_islands if s <= effective_length]
-            fixed_residues = islands_to_fixed_residues(motif_islands)
+            motif_islands = split_islands_at_gaps(motif_islands, pdb_residues)
+            fixed_residues = [r for r in islands_to_fixed_residues(motif_islands) if r in pdb_residues]
             cb(
                 f"Generation length capped at {MAX_GENERATED_LENGTH} aa "
                 f"(template is {len(template_seq)} aa)."

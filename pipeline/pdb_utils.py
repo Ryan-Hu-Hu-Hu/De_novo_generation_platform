@@ -43,6 +43,31 @@ def download_pdb(pdb_id: str, out_dir: str) -> str:
     return out_path
 
 
+def get_chain_residue_numbers(pdb_path: str, chain_id: str = "A") -> set:
+    """
+    Return the set of residue sequence numbers that physically exist in *chain_id*
+    of the PDB file (ATOM records only, standard amino acids).
+
+    PDB files routinely have missing residues (REMARK 465), so this gives the
+    ground-truth set that RFdiffusion can reference in a contig.
+    """
+    present = set()
+    with open(pdb_path) as fh:
+        for line in fh:
+            if not line.startswith("ATOM"):
+                continue
+            chain = line[21]
+            if chain != chain_id:
+                continue
+            try:
+                res_num = int(line[22:26].strip())
+                present.add(res_num)
+            except ValueError:
+                pass
+    logger.info("PDB %s chain %s: %d residue numbers present", pdb_path, chain_id, len(present))
+    return present
+
+
 def get_template_sequence(pdb_path: str, chain_id: str = "A") -> str:
     """Extract the FASTA sequence of a given chain from a PDB file using BioPython."""
     from Bio import SeqIO

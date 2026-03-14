@@ -155,6 +155,49 @@ def cluster_into_islands(
     return islands
 
 
+def split_islands_at_gaps(
+    islands: List[Tuple[int, int]],
+    pdb_residues: set,
+) -> List[Tuple[int, int]]:
+    """
+    Validate island ranges against the residues that physically exist in the PDB.
+
+    For each island (start, end):
+    - Keep only residues within [start, end] that are present in *pdb_residues*.
+    - If missing residues create internal gaps, split the island into separate
+      contiguous fragments (each fragment is a valid contig segment).
+
+    Returns a list of (start, end) tuples — all guaranteed to contain only
+    residues present in *pdb_residues*.  Empty islands are dropped.
+    """
+    if not pdb_residues:
+        return islands
+
+    fragments: List[Tuple[int, int]] = []
+    for start, end in islands:
+        present = sorted(r for r in range(start, end + 1) if r in pdb_residues)
+        if not present:
+            logger.warning("Island (%d, %d) has no present residues in PDB — skipping.", start, end)
+            continue
+
+        # Group into contiguous runs
+        run_s = run_e = present[0]
+        for r in present[1:]:
+            if r == run_e + 1:
+                run_e = r
+            else:
+                fragments.append((run_s, run_e))
+                run_s = run_e = r
+        fragments.append((run_s, run_e))
+
+    if len(fragments) != len(islands):
+        logger.info(
+            "After PDB gap validation: %d islands → %d fragments: %s",
+            len(islands), len(fragments), fragments,
+        )
+    return fragments
+
+
 def residues_to_contig(
     fixed_residues: List[int],
     total_length: int,
