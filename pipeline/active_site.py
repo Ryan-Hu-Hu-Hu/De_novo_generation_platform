@@ -79,6 +79,50 @@ def parse_p2rank_output(output_dir: str, pdb_stem: str) -> List[int]:
     return pocket_residues
 
 
+def cluster_into_islands(
+    residues: List[int],
+    max_islands: int = 2,
+    gap_tolerance: int = 4,
+) -> List[Tuple[int, int]]:
+    """
+    Cluster discrete residue numbers into at most *max_islands* contiguous ranges.
+
+    Algorithm:
+    1. Sort residues and group runs where consecutive gap ≤ gap_tolerance.
+    2. Rank groups by size (descending) and keep the top *max_islands*.
+    3. Return sorted (start, end) tuples — each tuple is a closed inclusive range.
+
+    This implements the "motif island" strategy: feeding RFdiffusion at most 2
+    compact motif stretches maximises success rate vs. scattering many fixed
+    positions across the contig.
+    """
+    if not residues:
+        return []
+
+    sorted_res = sorted(set(residues))
+    blocks: List[List[int]] = []
+    current: List[int] = [sorted_res[0]]
+    for r in sorted_res[1:]:
+        if r - current[-1] <= gap_tolerance:
+            current.append(r)
+        else:
+            blocks.append(current)
+            current = [r]
+    blocks.append(current)
+
+    # Select the largest blocks (most active-site residues)
+    blocks.sort(key=len, reverse=True)
+    top = blocks[:max_islands]
+
+    # Convert to (start, end) and return sorted by position
+    islands = sorted((min(b), max(b)) for b in top)
+    logger.info(
+        "Motif islands (max=%d, gap_tol=%d): %s  ←  %d raw residues in %d blocks",
+        max_islands, gap_tolerance, islands, len(sorted_res), len(blocks),
+    )
+    return islands
+
+
 def residues_to_contig(
     fixed_residues: List[int],
     total_length: int,
@@ -116,3 +160,44 @@ def residues_to_contig(
             i = j + 1
 
     return "[" + "/".join(segments) + "]"
+
+
+def islands_to_contig(
+    islands: List[Tuple[int, int]],
+    total_length: int,
+    chain: str = "A",
+) -> str:
+    """
+    Build an RFdiffusion contig string from a list of (start, end) island ranges.
+
+    Free (diffused) segments between/around islands keep their exact length so
+    the total scaffold length matches *total_length*.
+
+    Example: islands=[(5,10),(40,50)], total=100 →
+      '[4-4/A5-10/29-29/A40-50/50-50]'
+    """
+    if not islands:
+        return f"[{total_length}-{total_length}]"
+
+    segments: List[str] = []
+    prev_end = 0
+    for start, end in islands:
+        gap = start - prev_end - 1
+        if gap > 0:
+            segments.append(f"{gap}-{gap}")
+        segments.append(f"{chain}{start}-{end}")
+        prev_end = end
+
+    remaining = total_length - prev_end
+    if remaining > 0:
+        segments.append(f"{remaining}-{remaining}")
+
+    return "[" + "/".join(segments) + "]"
+
+
+def islands_to_fixed_residues(islands: List[Tuple[int, int]]) -> List[int]:
+    """Expand (start, end) island ranges to a flat sorted list of all residue numbers."""
+    residues: List[int] = []
+    for start, end in islands:
+        residues.extend(range(start, end + 1))
+    return residues

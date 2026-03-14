@@ -12,7 +12,10 @@ from .config import (
     ALL_DATA_DIRS,
 )
 from .pdb_utils import download_pdb, get_template_sequence, get_ligand_smiles
-from .active_site import run_p2rank, parse_p2rank_output, residues_to_contig
+from .active_site import (
+    run_p2rank, parse_p2rank_output,
+    cluster_into_islands, islands_to_contig, islands_to_fixed_residues,
+)
 from .rfdiffusion_runner import run_rfdiffusion
 from .proteinmpnn_runner import (
     parse_chains, assign_chains, make_fixed_positions,
@@ -113,11 +116,19 @@ class PipelineOrchestrator:
         try:
             run_p2rank(pdb_path, p2rank_out)
             pdb_stem = os.path.splitext(os.path.basename(pdb_path))[0]
-            fixed_residues = parse_p2rank_output(p2rank_out, pdb_stem)
-            cb(f"Active site residues: {fixed_residues}")
+            raw_residues = parse_p2rank_output(p2rank_out, pdb_stem)
+            # Consolidate into at most 2 contiguous motif islands
+            motif_islands = cluster_into_islands(raw_residues, max_islands=2, gap_tolerance=4)
+            fixed_residues = islands_to_fixed_residues(motif_islands)
+            cb(
+                f"Active site residues: {raw_residues}\n"
+                f"Motif islands (≤2): {motif_islands}\n"
+                f"Fixed positions: {fixed_residues}"
+            )
         except (FileNotFoundError, RuntimeError) as exc:
             logger.warning("P2Rank failed (%s); using empty contig.", exc)
             cb("P2Rank unavailable; generating without fixed residues.")
+            motif_islands = []
             fixed_residues = []
 
         # ── Step 3 — Template screening baselines ────────────────────────────
@@ -150,13 +161,23 @@ class PipelineOrchestrator:
                 unikp_parsed = parse_unikp_results(unikp_out)
                 template_kinetics = unikp_parsed.get("template", {})
                 cb(
-                    f"Template kinetics — kcat={template_kinetics.get('kcat', 0):.2f}, "
-                    f"Km={template_kinetics.get('Km', 0):.2f}, "
-                    f"kcat/Km={template_kinetics.get('kcat_Km', 0):.2f}"
+                    f"Template kinetics — kcat={template_kinetics.get('kcat', 0):.3f} s⁻¹, "
+                    f"Km={template_kinetics.get('Km', 0):.3f} mM, "
+                    f"kcat/Km={template_kinetics.get('kcat_Km', 0):.3f}"
                 )
             except Exception as exc:
                 logger.warning("Template UniKP failed: %s; kinetics screening disabled.", exc)
                 cb("UniKP unavailable; kinetics screening will be skipped.")
+
+        try:
+            s2t_tmpl = run_seq2topt(template_sequences, os.path.join(job_dir, "template_seq2topt"))
+            topt_tmpl = parse_seq2topt_results(s2t_tmpl, seq_names=["template"])
+            template_topt = topt_tmpl.get("template")
+            cb(f"Template Topt: {f'{template_topt:.1f}°C' if template_topt is not None else 'N/A'}")
+        except Exception as exc:
+            logger.warning("Template Seq2Topt failed: %s", exc)
+            template_topt = None
+            cb("Seq2Topt unavailable for template.")
 
         # ── Step 4 — Generation / evaluation iteration loop ──────────────────
         best_so_far: Optional[Dict] = None
@@ -165,14 +186,15 @@ class PipelineOrchestrator:
         effective_length = len(template_seq)
         if MAX_GENERATED_LENGTH is not None and effective_length > MAX_GENERATED_LENGTH:
             effective_length = MAX_GENERATED_LENGTH
-            # Drop fixed residues that fall beyond the cap
-            fixed_residues = [r for r in fixed_residues if r <= effective_length]
+            # Drop island ranges and fixed residues that fall beyond the cap
+            motif_islands = [(s, min(e, effective_length)) for s, e in motif_islands if s <= effective_length]
+            fixed_residues = islands_to_fixed_residues(motif_islands)
             cb(
                 f"Generation length capped at {MAX_GENERATED_LENGTH} aa "
                 f"(template is {len(template_seq)} aa)."
             )
 
-        contig_str = residues_to_contig(fixed_residues, effective_length)
+        contig_str = islands_to_contig(motif_islands, effective_length)
 
         for iteration in range(1, MAX_ITERATIONS + 1):
             cb(f"Iteration {iteration}/{MAX_ITERATIONS}: generating backbones with RFdiffusion…")
