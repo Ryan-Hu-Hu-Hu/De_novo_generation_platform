@@ -41,6 +41,22 @@ def _flat_sequences(design_seqs: Dict[str, list]) -> Dict[str, str]:
     return flat
 
 
+def _backbone_length(pdb_path: str) -> int:
+    """Count CA atoms in chain A of a PDB to determine backbone residue count."""
+    count = 0
+    seen = set()
+    with open(pdb_path) as fh:
+        for line in fh:
+            if line.startswith(("ATOM", "HETATM")) and line[12:16].strip() == "CA":
+                chain = line[21]
+                res_seq = line[22:26].strip()
+                key = (chain, res_seq)
+                if chain == "A" and key not in seen:
+                    seen.add(key)
+                    count += 1
+    return count
+
+
 class PipelineOrchestrator:
     """Coordinate the full de-novo protein generation and evaluation loop."""
 
@@ -191,9 +207,20 @@ class PipelineOrchestrator:
                 assign_chains(jsonl, assigned_jsonl)
                 make_fixed_positions(jsonl, fixed_pos_jsonl)
 
-                # Build per-design residue map (same residues for all designs)
+                # Build per-design residue map, clamped to each backbone's length
                 design_names = [os.path.splitext(os.path.basename(p))[0] for p in backbone_pdbs]
-                fixed_map = {n: fixed_residues for n in design_names}
+                fixed_map = {}
+                for pdb_p, name in zip(backbone_pdbs, design_names):
+                    bb_len = _backbone_length(pdb_p)
+                    clamped = [r for r in fixed_residues if r <= bb_len]
+                    if len(clamped) < len(fixed_residues):
+                        logger.warning(
+                            "Clamped fixed residues for %s: backbone has %d residues; "
+                            "dropped positions %s",
+                            name, bb_len,
+                            sorted(set(fixed_residues) - set(clamped)),
+                        )
+                    fixed_map[name] = clamped
                 update_fixed_positions(fixed_pos_jsonl, updated_pos_jsonl, fixed_map)
 
                 design_seqs = run_proteinmpnn(
