@@ -117,8 +117,9 @@ class PipelineOrchestrator:
             run_p2rank(pdb_path, p2rank_out)
             pdb_stem = os.path.splitext(os.path.basename(pdb_path))[0]
             raw_residues = parse_p2rank_output(p2rank_out, pdb_stem)
-            # Consolidate into at most 2 contiguous motif islands
-            motif_islands = cluster_into_islands(raw_residues, max_islands=2, gap_tolerance=4)
+            # Consolidate into at most 2 contiguous motif islands (all residues covered).
+            # Use template length here; capping is applied later after effective_length is set.
+            motif_islands = cluster_into_islands(raw_residues, len(template_seq), max_islands=2, padding=5)
             fixed_residues = islands_to_fixed_residues(motif_islands)
             cb(
                 f"Active site residues: {raw_residues}\n"

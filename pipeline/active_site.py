@@ -81,44 +81,76 @@ def parse_p2rank_output(output_dir: str, pdb_stem: str) -> List[int]:
 
 def cluster_into_islands(
     residues: List[int],
+    total_length: int,
     max_islands: int = 2,
-    gap_tolerance: int = 4,
+    padding: int = 5,
 ) -> List[Tuple[int, int]]:
     """
-    Cluster discrete residue numbers into at most *max_islands* contiguous ranges.
+    Consolidate all active-site residues into at most *max_islands* contiguous
+    ranges, guaranteeing every residue is covered.
 
-    Algorithm:
-    1. Sort residues and group runs where consecutive gap ≤ gap_tolerance.
-    2. Rank groups by size (descending) and keep the top *max_islands*.
-    3. Return sorted (start, end) tuples — each tuple is a closed inclusive range.
+    Algorithm (for max_islands=2):
+    1. Sort residues.
+    2. Find the largest gap between consecutive residues — this is the natural
+       split point that separates the two motif regions.
+    3. Island 1: [first_residue, last_residue_before_gap]
+       Island 2: [first_residue_after_gap, last_residue]
+    4. Expand each island by *padding* residues on each side so the surrounding
+       backbone context is included; clamp to [1, total_length].
 
-    This implements the "motif island" strategy: feeding RFdiffusion at most 2
-    compact motif stretches maximises success rate vs. scattering many fixed
-    positions across the contig.
+    If all residues are contiguous (no gap found) or only one island is requested,
+    a single island spanning all residues is returned.
+
+    Example: residues=[63,125,126,127,163,165,210,212,...,317,318,465,466],
+             total_length=470, padding=5
+      → largest gap: 318→465 (size 147)
+      → raw islands: [(63,318), (465,466)]
+      → after padding: [(58,323), (460,470)]  (clamped)
     """
     if not residues:
         return []
 
     sorted_res = sorted(set(residues))
-    blocks: List[List[int]] = []
-    current: List[int] = [sorted_res[0]]
-    for r in sorted_res[1:]:
-        if r - current[-1] <= gap_tolerance:
-            current.append(r)
-        else:
-            blocks.append(current)
-            current = [r]
-    blocks.append(current)
 
-    # Select the largest blocks (most active-site residues)
-    blocks.sort(key=len, reverse=True)
-    top = blocks[:max_islands]
+    if max_islands == 1 or len(sorted_res) == 1:
+        start = max(1, sorted_res[0] - padding)
+        end   = min(total_length, sorted_res[-1] + padding)
+        islands = [(start, end)]
+        logger.info("Motif island: %s ← %d residues", islands, len(sorted_res))
+        return islands
 
-    # Convert to (start, end) and return sorted by position
-    islands = sorted((min(b), max(b)) for b in top)
+    # Find the largest gap between consecutive residues
+    max_gap = -1
+    split_idx = 0  # index of the last residue in group 1
+    for i in range(len(sorted_res) - 1):
+        gap = sorted_res[i + 1] - sorted_res[i]
+        if gap > max_gap:
+            max_gap = gap
+            split_idx = i
+
+    group1 = sorted_res[: split_idx + 1]
+    group2 = sorted_res[split_idx + 1 :]
+
+    island1 = (
+        max(1, group1[0] - padding),
+        min(total_length, group1[-1] + padding),
+    )
+    island2 = (
+        max(1, group2[0] - padding),
+        min(total_length, group2[-1] + padding),
+    )
+
+    # Merge overlapping/touching islands (shouldn't happen with active sites,
+    # but guard against it)
+    if island1[1] >= island2[0]:
+        merged = (island1[0], max(island1[1], island2[1]))
+        logger.info("Motif islands merged (overlap): %s ← %d residues", [merged], len(sorted_res))
+        return [merged]
+
+    islands = [island1, island2]
     logger.info(
-        "Motif islands (max=%d, gap_tol=%d): %s  ←  %d raw residues in %d blocks",
-        max_islands, gap_tolerance, islands, len(sorted_res), len(blocks),
+        "Motif islands (split at gap %d, padding %d): %s ← %d residues",
+        max_gap, padding, islands, len(sorted_res),
     )
     return islands
 
