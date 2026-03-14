@@ -300,6 +300,7 @@ class PipelineOrchestrator:
                     best_so_far = {
                         "name": best_name,
                         "sequence": passed_ec.get(best_name, all_seqs.get(best_name, "")),
+                        "ec": ec_preds.get(best_name, template_ec),
                         "solubility": sol_scores.get(best_name, 0),
                     }
                 continue
@@ -331,6 +332,7 @@ class PipelineOrchestrator:
                     best_so_far = {
                         "name": best_name,
                         "sequence": passed_sol.get(best_name, ""),
+                        "ec": ec_preds.get(best_name, template_ec),
                         "solubility": sol_scores.get(best_name, 0),
                         **({"kcat": kinetics[best_name]["kcat"],
                             "Km":   kinetics[best_name]["Km"],
