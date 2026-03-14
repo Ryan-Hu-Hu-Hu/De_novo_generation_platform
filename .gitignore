@@ -8,6 +8,8 @@ secrets.yaml
 data/
 jobs.db
 *.db
+docs/product_description.txt
+docs/作品說明書.md
 
 # ── Python ───────────────────────────────────────────────────────────────────
 __pycache__/

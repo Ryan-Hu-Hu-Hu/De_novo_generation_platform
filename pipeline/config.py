@@ -42,9 +42,9 @@ SEQ2TOPT_ENV    = "lin"
 # ProteinMPNN and SoDoPE run in the current 'lin' environment
 
 # ── Pipeline parameters ───────────────────────────────────────────────────────
-NUM_DESIGNS        = 1  # RFdiffusion: number of backbone designs per iteration
+NUM_DESIGNS        = 2  # RFdiffusion: number of backbone designs per iteration
 NUM_SEQ_PER_TARGET = 2   # ProteinMPNN: sequences per backbone
-MAX_ITERATIONS     = 2   # Max generation/evaluation loops before giving up
+MAX_ITERATIONS     = 1   # Max generation/evaluation loops before giving up
 
 # ── Generation length constraint ─────────────────────────────────────────────
 # Caps the diffused backbone to at most this many residues. Keeping this small
